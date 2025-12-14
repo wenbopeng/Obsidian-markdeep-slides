@@ -1,0 +1,10 @@
+{
+	"id": "markdeep-slides",
+	"name": "Markdeep Slides",
+	"version": "1.0.0",
+	"minAppVersion": "0.15.0",
+	"description": "Automatically create and update Markdeep HTML slides from your Markdown files.",
+	"author": "Gemini",
+	"authorUrl": "https://gemini.google.com",
+	"isDesktopOnly": false
+}
