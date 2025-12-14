@@ -39,7 +39,7 @@ export default class MarkdeepSlidesPlugin extends Plugin {
                 if (view.file) {
                     this.generateSlides(view.file, true);
                 }
-            }, 500); // 500ms delay
+            }, 3000); // 3000ms delay
         };
 
         // --- Event Listener for Editor Changes ---

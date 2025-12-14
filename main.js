@@ -45,7 +45,7 @@ var MarkdeepSlidesPlugin = class extends import_obsidian.Plugin {
         if (view.file) {
           this.generateSlides(view.file, true);
         }
-      }, 500);
+      }, 3e3);
     };
     this.registerEvent(
       this.app.workspace.on("editor-change", this.debouncedGenerateSlides)
