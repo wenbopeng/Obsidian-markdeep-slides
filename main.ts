@@ -61,6 +61,12 @@ export default class MarkdeepSlidesPlugin extends Plugin {
             },
         });
 
+        this.addCommand({
+            id: 'open-slides-in-browser',
+            name: 'Open Slides in Browser',
+            callback: () => this.openSlidesInBrowser(),
+        });
+
         // --- Settings Tab ---
         this.addSettingTab(new MarkdeepSlidesSettingTab(this.app, this));
 
@@ -79,10 +85,65 @@ export default class MarkdeepSlidesPlugin extends Plugin {
         await this.saveData(this.settings);
     }
 
+    async openSlidesInBrowser() {
+        const activeFile = this.app.workspace.getActiveFile();
+        if (!activeFile || activeFile.extension !== 'md') {
+            new Notice('No active Markdown file.');
+            return;
+        }
+
+        const frontmatter = this.app.metadataCache.getFileCache(activeFile)?.frontmatter;
+        if (!this.hasMdslidesTag(frontmatter)) {
+            new Notice('File does not have "mdslides" in its tags.');
+            return;
+        }
+
+        const htmlPath = join(this.settings.slidesPath, `${activeFile.basename}.html`);
+        const htmlFile = this.app.vault.getAbstractFileByPath(htmlPath);
+
+        if (!htmlFile) {
+            await this.generateSlides(activeFile, false);
+        }
+
+        const adapter = this.app.vault.adapter;
+        if ('getFullPath' in adapter) {
+            const fullPath = (adapter as any).getFullPath(htmlPath);
+            
+            const command = this.getOpenCommand(fullPath);
+            if (command) {
+                // eslint-disable-next-line @typescript-eslint/no-var-requires
+                require('child_process').exec(command, (err: any) => {
+                    if (err) {
+                        console.error('Error opening file in browser:', err);
+                        new Notice('Failed to open file in browser.');
+                    }
+                });
+            }
+        } else {
+            new Notice('This feature is not supported on your platform.');
+        }
+    }
+    
+    getOpenCommand(filePath: string): string | null {
+        const platform = process.platform;
+        const sanitizedPath = `"${filePath}"`; // Quote path to handle spaces
+        if (platform === 'darwin') { // macOS
+            return `open ${sanitizedPath}`;
+        }
+        if (platform === 'win32') { // Windows
+            return `start ${sanitizedPath}`;
+        }
+        if (platform === 'linux') { // Linux
+            return `xdg-open ${sanitizedPath}`;
+        }
+        return null;
+    }
+
     async generateSlides(file: TFile, isAuto: boolean) {
         if (!file || file.extension !== 'md') {
             return;
         }
+
 
         const fileCache = this.app.metadataCache.getFileCache(file);
         const frontmatter = fileCache?.frontmatter;

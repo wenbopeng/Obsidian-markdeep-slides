@@ -62,6 +62,11 @@ var MarkdeepSlidesPlugin = class extends import_obsidian.Plugin {
         }
       }
     });
+    this.addCommand({
+      id: "open-slides-in-browser",
+      name: "Open Slides in Browser",
+      callback: () => this.openSlidesInBrowser()
+    });
     this.addSettingTab(new MarkdeepSlidesSettingTab(this.app, this));
     console.log("Markdeep Slides plugin loaded.");
   }
@@ -73,6 +78,53 @@ var MarkdeepSlidesPlugin = class extends import_obsidian.Plugin {
   }
   async saveSettings() {
     await this.saveData(this.settings);
+  }
+  async openSlidesInBrowser() {
+    var _a;
+    const activeFile = this.app.workspace.getActiveFile();
+    if (!activeFile || activeFile.extension !== "md") {
+      new import_obsidian.Notice("No active Markdown file.");
+      return;
+    }
+    const frontmatter = (_a = this.app.metadataCache.getFileCache(activeFile)) == null ? void 0 : _a.frontmatter;
+    if (!this.hasMdslidesTag(frontmatter)) {
+      new import_obsidian.Notice('File does not have "mdslides" in its tags.');
+      return;
+    }
+    const htmlPath = (0, import_path.join)(this.settings.slidesPath, `${activeFile.basename}.html`);
+    const htmlFile = this.app.vault.getAbstractFileByPath(htmlPath);
+    if (!htmlFile) {
+      await this.generateSlides(activeFile, false);
+    }
+    const adapter = this.app.vault.adapter;
+    if ("getFullPath" in adapter) {
+      const fullPath = adapter.getFullPath(htmlPath);
+      const command = this.getOpenCommand(fullPath);
+      if (command) {
+        require("child_process").exec(command, (err) => {
+          if (err) {
+            console.error("Error opening file in browser:", err);
+            new import_obsidian.Notice("Failed to open file in browser.");
+          }
+        });
+      }
+    } else {
+      new import_obsidian.Notice("This feature is not supported on your platform.");
+    }
+  }
+  getOpenCommand(filePath) {
+    const platform = process.platform;
+    const sanitizedPath = `"${filePath}"`;
+    if (platform === "darwin") {
+      return `open ${sanitizedPath}`;
+    }
+    if (platform === "win32") {
+      return `start ${sanitizedPath}`;
+    }
+    if (platform === "linux") {
+      return `xdg-open ${sanitizedPath}`;
+    }
+    return null;
   }
   async generateSlides(file, isAuto) {
     if (!file || file.extension !== "md") {
