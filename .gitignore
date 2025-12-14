@@ -1,0 +1,20 @@
+# 忽略 Mac 系统文件
+.DS_Store
+
+# 忽略 PDF
+*.pdf
+
+# 忽略 HTML
+*.html
+
+# 缓存 & 临时文件
+*.log
+*.tmp
+*.swp
+
+# Python 缓存
+__pycache__/
+*.pyc
+
+# Node 环境目录（若无需求可删除）
+node_modules/
