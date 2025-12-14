@@ -95,16 +95,12 @@ export default class MarkdeepSlidesPlugin extends Plugin {
         }
 
         try {
-            let content = await this.app.vault.read(file);
+            const fileContent = await this.app.vault.read(file);
 
-            // Remove YAML frontmatter
-            if (frontmatter) {
-                const frontmatterPosition = fileCache.frontmatterPosition;
-                if (frontmatterPosition) {
-                    content = content.substring(frontmatterPosition.end.line + 1);
-                }
-            }
-            
+            // Remove YAML frontmatter using a regular expression
+            const frontmatterRegex = /^---\s*[\s\S]*?---\s*/;
+            const content = fileContent.replace(frontmatterRegex, '');
+
             // Append the script
             const finalHtml = content + SCRIPT_TO_APPEND;
 

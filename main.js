@@ -87,13 +87,9 @@ var MarkdeepSlidesPlugin = class extends import_obsidian.Plugin {
       return;
     }
     try {
-      let content = await this.app.vault.read(file);
-      if (frontmatter) {
-        const frontmatterPosition = fileCache.frontmatterPosition;
-        if (frontmatterPosition) {
-          content = content.substring(frontmatterPosition.end.line + 1);
-        }
-      }
+      const fileContent = await this.app.vault.read(file);
+      const frontmatterRegex = /^---\s*[\s\S]*?---\s*/;
+      const content = fileContent.replace(frontmatterRegex, "");
       const finalHtml = content + SCRIPT_TO_APPEND;
       const outputDir = this.settings.slidesPath;
       const outputFileName = `${file.basename}.html`;
