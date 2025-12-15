@@ -19,6 +19,25 @@ import {
 
 import { join } from 'path';
 
+// This new script saves the slide position (hash) to session storage before a reload
+// and restores it after the reload, allowing for stateful refreshes.
+const STATE_RECOVERY_SCRIPT = `
+<script>
+    window.addEventListener('DOMContentLoaded', () => {
+        const savedHash = window.sessionStorage.getItem('markdeep_slide_hash');
+        if (savedHash && !window.location.hash) {
+            window.location.hash = savedHash;
+        }
+        window.sessionStorage.removeItem('markdeep_slide_hash'); // Clean up
+    });
+    window.addEventListener('beforeunload', () => {
+        if (window.location.hash) {
+            window.sessionStorage.setItem('markdeep_slide_hash', window.location.hash);
+        }
+    });
+</script>
+`;
+
 export const SLIDES_VIEW_TYPE = 'markdeep-slides-view';
 
 export class SlidesView extends ItemView {
@@ -70,7 +89,7 @@ export class SlidesView extends ItemView {
 
         const container = this.contentEl.createEl('div');
         container.style.flexGrow = '1';
-        container.innerHTML = `<webview src="${this.url}" style="width:100%; height:100%; border:none;"></webview>`;
+        container.innerHTML = `<webview src="${this.url}" style="width:100%; height:100%; border:none;" webpreferences="allowRunningInsecureContent"></webview>`;
 
         const webview = container.find('webview');
 
@@ -92,8 +111,6 @@ export class SlidesView extends ItemView {
     }
 }
 
-
-const SERVER_PORT = 8765;
 
 export class HttpServer {
     private server: http.Server | null = null;
@@ -180,52 +197,26 @@ export class HttpServer {
 
 interface MarkdeepSlidesSettings {
     slidesPath: string;
+    port: number;
 }
 
 const DEFAULT_SETTINGS: MarkdeepSlidesSettings = {
     slidesPath: 'slides',
+    port: 8765,
 };
-
-const REFRESH_SCRIPT = `
-<script>
-window.addEventListener('obsidian-refresh', () => {
-    fetch(window.location.href)
-        .then(response => response.text())
-        .then(html => {
-            const parser = new DOMParser();
-            const newDoc = parser.parseFromString(html, 'text/html');
-            if (window.Idiomorph) {
-                window.Idiomorph.morph(document.body, newDoc.body);
-            } else {
-                console.error("Idiomorph not found. Falling back to full reload.");
-                window.location.reload();
-            }
-        });
-});
-</script>
-`;
 
 export default class MarkdeepSlidesPlugin extends Plugin {
     settings: MarkdeepSlidesSettings;
     private debouncedGenerateSlides: (editor: Editor, view: MarkdownView) => void;
     private httpServer: HttpServer;
     private slideViews: Map<string, SlidesView> = new Map();
-    private idiomorphScript: string = '';
 
     async onload() {
         await this.loadSettings();
 
-        try {
-            const idiomorphPath = join((this.app.vault.adapter as any).getBasePath(), 'node_modules/idiomorph/dist/idiomorph.js');
-            this.idiomorphScript = await fs.promises.readFile(idiomorphPath, 'utf-8');
-        } catch (e) {
-            new Notice('Failed to load DOM morphing library. Auto-refresh may not work correctly.');
-            console.error('Error loading idiomorph:', e);
-        }
-
         const vaultBasePath = (this.app.vault.adapter as any).getBasePath();
         const absoluteSlidesPath = join(vaultBasePath, this.settings.slidesPath);
-        this.httpServer = new HttpServer(SERVER_PORT, absoluteSlidesPath);
+        this.httpServer = new HttpServer(this.settings.port, absoluteSlidesPath);
         try {
             await this.httpServer.start();
         } catch (e) {
@@ -239,7 +230,7 @@ export default class MarkdeepSlidesPlugin extends Plugin {
                 if (view) {
                     const webview = view.contentEl.querySelector('webview');
                     if (webview) {
-                        (webview as any).executeJavaScript("window.dispatchEvent(new CustomEvent('obsidian-refresh'));");
+                        (webview as any).reload();
                     }
                 }
             }
@@ -328,7 +319,7 @@ export default class MarkdeepSlidesPlugin extends Plugin {
 
         if (!htmlFile) await this.generateSlides(activeFile, false);
 
-        const slideUrl = `http://localhost:${SERVER_PORT}/${activeFile.basename}.html`;
+        const slideUrl = `http://localhost:${this.settings.port}/${activeFile.basename}.html`;
         window.open(slideUrl, '_blank');
         new Notice(`Opening slides in external browser...`);
     }
@@ -351,7 +342,7 @@ export default class MarkdeepSlidesPlugin extends Plugin {
 
         if (!htmlFile) await this.generateSlides(activeFile, false);
 
-        const slideUrl = `http://localhost:${SERVER_PORT}/${activeFile.basename}.html`;
+        const slideUrl = `http://localhost:${this.settings.port}/${activeFile.basename}.html`;
 
         this.app.workspace.detachLeavesOfType(SLIDES_VIEW_TYPE);
 
@@ -382,27 +373,22 @@ export default class MarkdeepSlidesPlugin extends Plugin {
 
         try {
             const fileContent = await this.app.vault.read(file);
-            const frontmatterRegex = /^---\s*[ -￿]*?---\s*/;
+                        const frontmatterRegex = /^---\s*[\s\S]*?---\s*$/m;
             const content = fileContent.replace(frontmatterRegex, '');
             let htmlToProcess = content;
 
             const metaCharset = '<meta charset="utf-8">';
             if (htmlToProcess.includes('</head>')) {
-                htmlToProcess = htmlToProcess.replace('</head>', `${metaCharset}
-</head>`);
+                htmlToProcess = htmlToProcess.replace('</head>', `${metaCharset}\n</head>`);
             } else {
-                htmlToProcess = `${metaCharset}
-${htmlToProcess}`;
+                htmlToProcess = `${metaCharset}\n${htmlToProcess}`;
             }
 
-            const SCRIPT_TO_APPEND = `
-<script src="markdeep-slides/slides-init.js"></script>
-`;
-            const fullScript = `${SCRIPT_TO_APPEND}<script>${this.idiomorphScript}</script>${REFRESH_SCRIPT}`;
+            const SCRIPT_TO_APPEND = `\n<script src="markdeep-slides/slides-init.js"></script>`;
+            const fullScript = `${STATE_RECOVERY_SCRIPT}\n${SCRIPT_TO_APPEND}`;
 
             if (htmlToProcess.includes('</body>')) {
-                htmlToProcess = htmlToProcess.replace('</body>', `${fullScript}
-</body>`);
+                htmlToProcess = htmlToProcess.replace('</body>', `${fullScript}\n</body>`);
             } else {
                 htmlToProcess = htmlToProcess + fullScript;
             }
@@ -462,6 +448,17 @@ class MarkdeepSlidesSettingTab extends PluginSettingTab {
                 .setValue(this.plugin.settings.slidesPath)
                 .onChange(async (value) => {
                     this.plugin.settings.slidesPath = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('Server port')
+            .setDesc('The local server port to use. Requires plugin reload to take effect.')
+            .addText(text => text
+                .setPlaceholder('e.g., 8765')
+                .setValue(this.plugin.settings.port.toString())
+                .onChange(async (value) => {
+                    this.plugin.settings.port = value ? parseInt(value) : 8765;
                     await this.plugin.saveSettings();
                 }));
     }

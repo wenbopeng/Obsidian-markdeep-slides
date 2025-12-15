@@ -45,6 +45,22 @@ var fs = __toESM(require("fs"));
 var path = __toESM(require("path"));
 var import_obsidian = require("obsidian");
 var import_path = require("path");
+var STATE_RECOVERY_SCRIPT = `
+<script>
+    window.addEventListener('DOMContentLoaded', () => {
+        const savedHash = window.sessionStorage.getItem('markdeep_slide_hash');
+        if (savedHash && !window.location.hash) {
+            window.location.hash = savedHash;
+        }
+        window.sessionStorage.removeItem('markdeep_slide_hash'); // Clean up
+    });
+    window.addEventListener('beforeunload', () => {
+        if (window.location.hash) {
+            window.sessionStorage.setItem('markdeep_slide_hash', window.location.hash);
+        }
+    });
+<\/script>
+`;
 var SLIDES_VIEW_TYPE = "markdeep-slides-view";
 var SlidesView = class extends import_obsidian.ItemView {
   constructor(leaf, plugin) {
@@ -83,7 +99,7 @@ var SlidesView = class extends import_obsidian.ItemView {
     }
     const container = this.contentEl.createEl("div");
     container.style.flexGrow = "1";
-    container.innerHTML = `<webview src="${this.url}" style="width:100%; height:100%; border:none;"></webview>`;
+    container.innerHTML = `<webview src="${this.url}" style="width:100%; height:100%; border:none;" webpreferences="allowRunningInsecureContent"></webview>`;
     const webview = container.find("webview");
     if (webview) {
       webview.addEventListener("dom-ready", () => {
@@ -100,7 +116,6 @@ var SlidesView = class extends import_obsidian.ItemView {
     }
   }
 };
-var SERVER_PORT = 8765;
 var HttpServer = class {
   constructor(port, slidesPath) {
     this.server = null;
@@ -194,44 +209,19 @@ var HttpServer = class {
   }
 };
 var DEFAULT_SETTINGS = {
-  slidesPath: "slides"
+  slidesPath: "slides",
+  port: 8765
 };
-var REFRESH_SCRIPT = `
-<script>
-window.addEventListener('obsidian-refresh', () => {
-    fetch(window.location.href)
-        .then(response => response.text())
-        .then(html => {
-            const parser = new DOMParser();
-            const newDoc = parser.parseFromString(html, 'text/html');
-            if (window.Idiomorph) {
-                window.Idiomorph.morph(document.body, newDoc.body);
-            } else {
-                console.error("Idiomorph not found. Falling back to full reload.");
-                window.location.reload();
-            }
-        });
-});
-<\/script>
-`;
 var MarkdeepSlidesPlugin = class extends import_obsidian.Plugin {
   constructor() {
     super(...arguments);
     this.slideViews = /* @__PURE__ */ new Map();
-    this.idiomorphScript = "";
   }
   async onload() {
     await this.loadSettings();
-    try {
-      const idiomorphPath = (0, import_path.join)(this.app.vault.adapter.getBasePath(), "node_modules/idiomorph/dist/idiomorph.js");
-      this.idiomorphScript = await fs.promises.readFile(idiomorphPath, "utf-8");
-    } catch (e) {
-      new import_obsidian.Notice("Failed to load DOM morphing library. Auto-refresh may not work correctly.");
-      console.error("Error loading idiomorph:", e);
-    }
     const vaultBasePath = this.app.vault.adapter.getBasePath();
     const absoluteSlidesPath = (0, import_path.join)(vaultBasePath, this.settings.slidesPath);
-    this.httpServer = new HttpServer(SERVER_PORT, absoluteSlidesPath);
+    this.httpServer = new HttpServer(this.settings.port, absoluteSlidesPath);
     try {
       await this.httpServer.start();
     } catch (e) {
@@ -244,7 +234,7 @@ var MarkdeepSlidesPlugin = class extends import_obsidian.Plugin {
         if (view) {
           const webview = view.contentEl.querySelector("webview");
           if (webview) {
-            webview.executeJavaScript("window.dispatchEvent(new CustomEvent('obsidian-refresh'));");
+            webview.reload();
           }
         }
       }
@@ -322,7 +312,7 @@ var MarkdeepSlidesPlugin = class extends import_obsidian.Plugin {
     const htmlFile = this.app.vault.getAbstractFileByPath(htmlPath);
     if (!htmlFile)
       await this.generateSlides(activeFile, false);
-    const slideUrl = `http://localhost:${SERVER_PORT}/${activeFile.basename}.html`;
+    const slideUrl = `http://localhost:${this.settings.port}/${activeFile.basename}.html`;
     window.open(slideUrl, "_blank");
     new import_obsidian.Notice(`Opening slides in external browser...`);
   }
@@ -342,7 +332,7 @@ var MarkdeepSlidesPlugin = class extends import_obsidian.Plugin {
     const htmlFile = this.app.vault.getAbstractFileByPath(htmlPath);
     if (!htmlFile)
       await this.generateSlides(activeFile, false);
-    const slideUrl = `http://localhost:${SERVER_PORT}/${activeFile.basename}.html`;
+    const slideUrl = `http://localhost:${this.settings.port}/${activeFile.basename}.html`;
     this.app.workspace.detachLeavesOfType(SLIDES_VIEW_TYPE);
     const leaf = this.app.workspace.getLeaf("split", "vertical");
     await leaf.setViewState({
@@ -366,7 +356,7 @@ var MarkdeepSlidesPlugin = class extends import_obsidian.Plugin {
     }
     try {
       const fileContent = await this.app.vault.read(file);
-      const frontmatterRegex = /^---\s*[ -￿]*?---\s*/;
+      const frontmatterRegex = /^---\s*[\s\S]*?---\s*$/m;
       const content = fileContent.replace(frontmatterRegex, "");
       let htmlToProcess = content;
       const metaCharset = '<meta charset="utf-8">';
@@ -378,9 +368,9 @@ var MarkdeepSlidesPlugin = class extends import_obsidian.Plugin {
 ${htmlToProcess}`;
       }
       const SCRIPT_TO_APPEND = `
-<script src="markdeep-slides/slides-init.js"><\/script>
-`;
-      const fullScript = `${SCRIPT_TO_APPEND}<script>${this.idiomorphScript}<\/script>${REFRESH_SCRIPT}`;
+<script src="markdeep-slides/slides-init.js"><\/script>`;
+      const fullScript = `${STATE_RECOVERY_SCRIPT}
+${SCRIPT_TO_APPEND}`;
       if (htmlToProcess.includes("</body>")) {
         htmlToProcess = htmlToProcess.replace("</body>", `${fullScript}
 </body>`);
@@ -430,6 +420,10 @@ var MarkdeepSlidesSettingTab = class extends import_obsidian.PluginSettingTab {
     containerEl.createEl("h2", { text: "Markdeep Slides Settings" });
     new import_obsidian.Setting(containerEl).setName("Slides output path").setDesc("The vault path to save the generated HTML slide files.").addText((text) => text.setPlaceholder("e.g., slides").setValue(this.plugin.settings.slidesPath).onChange(async (value) => {
       this.plugin.settings.slidesPath = value;
+      await this.plugin.saveSettings();
+    }));
+    new import_obsidian.Setting(containerEl).setName("Server port").setDesc("The local server port to use. Requires plugin reload to take effect.").addText((text) => text.setPlaceholder("e.g., 8765").setValue(this.plugin.settings.port.toString()).onChange(async (value) => {
+      this.plugin.settings.port = value ? parseInt(value) : 8765;
       await this.plugin.saveSettings();
     }));
   }
