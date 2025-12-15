@@ -308,7 +308,7 @@ var MarkdeepSlidesPlugin = class extends import_obsidian.Plugin {
       new import_obsidian.Notice('File does not have "mdslides" in its tags.');
       return;
     }
-    const htmlPath = (0, import_path.join)(this.settings.slidesPath, `${activeFile.basename}.html`);
+    const htmlPath = import_path.posix.join(this.settings.slidesPath, `${activeFile.basename}.html`);
     const htmlFile = this.app.vault.getAbstractFileByPath(htmlPath);
     if (!htmlFile)
       await this.generateSlides(activeFile, false);
@@ -328,7 +328,7 @@ var MarkdeepSlidesPlugin = class extends import_obsidian.Plugin {
       new import_obsidian.Notice('File does not have "mdslides" in its tags.');
       return;
     }
-    const htmlPath = (0, import_path.join)(this.settings.slidesPath, `${activeFile.basename}.html`);
+    const htmlPath = import_path.posix.join(this.settings.slidesPath, `${activeFile.basename}.html`);
     const htmlFile = this.app.vault.getAbstractFileByPath(htmlPath);
     if (!htmlFile)
       await this.generateSlides(activeFile, false);
@@ -379,7 +379,7 @@ ${SCRIPT_TO_APPEND}`;
       }
       const finalHtml = htmlToProcess;
       const outputDir = this.settings.slidesPath;
-      const outputPath = (0, import_path.join)(outputDir, `${file.basename}.html`);
+      const outputPath = import_path.posix.join(outputDir, `${file.basename}.html`);
       try {
         await this.app.vault.createFolder(outputDir);
       } catch (e) {

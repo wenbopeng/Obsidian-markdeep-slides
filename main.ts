@@ -17,7 +17,7 @@ import {
     ViewState
 } from 'obsidian';
 
-import { join } from 'path';
+import { join, posix } from 'path';
 
 // This new script saves the slide position (hash) to session storage before a reload
 // and restores it after the reload, allowing for stateful refreshes.
@@ -314,7 +314,7 @@ export default class MarkdeepSlidesPlugin extends Plugin {
             return;
         }
 
-        const htmlPath = join(this.settings.slidesPath, `${activeFile.basename}.html`);
+        const htmlPath = posix.join(this.settings.slidesPath, `${activeFile.basename}.html`);
         const htmlFile = this.app.vault.getAbstractFileByPath(htmlPath);
 
         if (!htmlFile) await this.generateSlides(activeFile, false);
@@ -337,7 +337,7 @@ export default class MarkdeepSlidesPlugin extends Plugin {
             return;
         }
 
-        const htmlPath = join(this.settings.slidesPath, `${activeFile.basename}.html`);
+        const htmlPath = posix.join(this.settings.slidesPath, `${activeFile.basename}.html`);
         const htmlFile = this.app.vault.getAbstractFileByPath(htmlPath);
 
         if (!htmlFile) await this.generateSlides(activeFile, false);
@@ -395,7 +395,7 @@ export default class MarkdeepSlidesPlugin extends Plugin {
 
             const finalHtml = htmlToProcess;
             const outputDir = this.settings.slidesPath;
-            const outputPath = join(outputDir, `${file.basename}.html`);
+            const outputPath = posix.join(outputDir, `${file.basename}.html`);
             
             try {
                 await this.app.vault.createFolder(outputDir);
