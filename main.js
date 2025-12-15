@@ -47,8 +47,9 @@ var import_obsidian = require("obsidian");
 var import_path = require("path");
 var SLIDES_VIEW_TYPE = "markdeep-slides-view";
 var SlidesView = class extends import_obsidian.ItemView {
-  constructor(leaf) {
+  constructor(leaf, plugin) {
     super(leaf);
+    this.plugin = plugin;
   }
   getViewType() {
     return SLIDES_VIEW_TYPE;
@@ -61,12 +62,14 @@ var SlidesView = class extends import_obsidian.ItemView {
   }
   async setState(state, options) {
     this.url = state.url;
+    this.htmlPath = state.htmlPath;
     await this.onOpen();
     return super.setState(state, options);
   }
   getState() {
     const state = super.getState();
     state.url = this.url;
+    state.htmlPath = this.htmlPath;
     return state;
   }
   async onOpen() {
@@ -74,9 +77,7 @@ var SlidesView = class extends import_obsidian.ItemView {
     this.contentEl.style.height = "100%";
     this.contentEl.style.display = "flex";
     this.contentEl.style.flexDirection = "column";
-    this.contentEl.createEl("h2", { text: "Loading Slides..." });
     if (!this.url) {
-      this.contentEl.empty();
       this.contentEl.createEl("h2", { text: "No URL specified" });
       return;
     }
@@ -85,24 +86,22 @@ var SlidesView = class extends import_obsidian.ItemView {
     container.innerHTML = `<webview src="${this.url}" style="width:100%; height:100%; border:none;"></webview>`;
     const webview = container.find("webview");
     if (webview) {
-      webview.style.border = "none";
       webview.addEventListener("dom-ready", () => {
-        this.contentEl.removeChild(this.contentEl.children[0]);
       });
       webview.addEventListener("did-fail-load", (event) => {
         console.error("Failed to load slides:", event);
-        this.contentEl.empty();
         this.contentEl.createEl("h2", { text: "Error Loading Slides" });
-        this.contentEl.createEl("p", { text: "Could not load the slide preview. Make sure the local server is running and the URL is correct." });
       });
     }
   }
   async onClose() {
+    if (this.htmlPath) {
+      this.plugin.removeSlideView(this.htmlPath);
+    }
   }
 };
 var SERVER_PORT = 8765;
 var HttpServer = class {
-  // The base path for your slides
   constructor(port, slidesPath) {
     this.server = null;
     this.port = port;
@@ -117,10 +116,8 @@ var HttpServer = class {
       });
       this.server.on("error", (e) => {
         if (e.code === "EADDRINUSE") {
-          console.error(`Port ${this.port} is already in use.`);
           reject(new Error(`Port ${this.port} is already in use.`));
         } else {
-          console.error("Server error:", e.message);
           reject(e);
         }
       });
@@ -130,13 +127,9 @@ var HttpServer = class {
     return new Promise((resolve, reject) => {
       if (this.server) {
         this.server.close((err) => {
-          if (err) {
-            console.error("Error stopping server:", err.message);
-            reject(err);
-          } else {
-            console.log("Server stopped.");
-            resolve();
-          }
+          if (err)
+            return reject(err);
+          resolve();
         });
       } else {
         resolve();
@@ -150,11 +143,7 @@ var HttpServer = class {
       return;
     }
     const decodedUrl = decodeURIComponent(req.url);
-    console.log(`[Slides Server] Request URL: ${req.url}`);
-    console.log(`[Slides Server] Decoded URL: ${decodedUrl}`);
-    console.log(`[Slides Server] Slides Path: ${this.slidesPath}`);
     let filePath = path.join(this.slidesPath, decodedUrl);
-    console.log(`[Slides Server] Full File Path: ${filePath}`);
     if (!filePath.startsWith(this.slidesPath)) {
       res.statusCode = 403;
       res.end("Forbidden");
@@ -162,14 +151,8 @@ var HttpServer = class {
     }
     fs.readFile(filePath, (err, data) => {
       if (err) {
-        console.error(`[Slides Server] Error reading file: ${err.message}`);
-        if (err.code === "ENOENT") {
-          res.statusCode = 404;
-          res.end("File not found.");
-        } else {
-          res.statusCode = 500;
-          res.end(`Server error: ${err.message}`);
-        }
+        res.statusCode = err.code === "ENOENT" ? 404 : 500;
+        res.end(err.code === "ENOENT" ? "File not found." : `Server error: ${err.message}`);
         return;
       }
       const ext = path.extname(filePath).toLowerCase();
@@ -206,7 +189,6 @@ var HttpServer = class {
       res.end(data);
     });
   }
-  // Method to update slidesPath if settings change
   setSlidesPath(newPath) {
     this.slidesPath = newPath;
   }
@@ -214,13 +196,39 @@ var HttpServer = class {
 var DEFAULT_SETTINGS = {
   slidesPath: "slides"
 };
-var SCRIPT_TO_APPEND = `
-<script src="markdeep-slides/slides-init.js"><\/script>
+var REFRESH_SCRIPT = `
+<script>
+window.addEventListener('obsidian-refresh', () => {
+    fetch(window.location.href)
+        .then(response => response.text())
+        .then(html => {
+            const parser = new DOMParser();
+            const newDoc = parser.parseFromString(html, 'text/html');
+            if (window.Idiomorph) {
+                window.Idiomorph.morph(document.body, newDoc.body);
+            } else {
+                console.error("Idiomorph not found. Falling back to full reload.");
+                window.location.reload();
+            }
+        });
+});
+<\/script>
 `;
 var MarkdeepSlidesPlugin = class extends import_obsidian.Plugin {
-  // Add this line
+  constructor() {
+    super(...arguments);
+    this.slideViews = /* @__PURE__ */ new Map();
+    this.idiomorphScript = "";
+  }
   async onload() {
     await this.loadSettings();
+    try {
+      const idiomorphPath = (0, import_path.join)(this.app.vault.adapter.getBasePath(), "node_modules/idiomorph/dist/idiomorph.js");
+      this.idiomorphScript = await fs.promises.readFile(idiomorphPath, "utf-8");
+    } catch (e) {
+      new import_obsidian.Notice("Failed to load DOM morphing library. Auto-refresh may not work correctly.");
+      console.error("Error loading idiomorph:", e);
+    }
     const vaultBasePath = this.app.vault.adapter.getBasePath();
     const absoluteSlidesPath = (0, import_path.join)(vaultBasePath, this.settings.slidesPath);
     this.httpServer = new HttpServer(SERVER_PORT, absoluteSlidesPath);
@@ -230,28 +238,35 @@ var MarkdeepSlidesPlugin = class extends import_obsidian.Plugin {
       new import_obsidian.Notice(`Failed to start local server: ${e.message}`);
       console.error("Failed to start local server:", e);
     }
+    this.registerEvent(this.app.vault.on("modify", (file) => {
+      if (file instanceof import_obsidian.TFile && this.slideViews.has(file.path)) {
+        const view = this.slideViews.get(file.path);
+        if (view) {
+          const webview = view.contentEl.querySelector("webview");
+          if (webview) {
+            webview.executeJavaScript("window.dispatchEvent(new CustomEvent('obsidian-refresh'));");
+          }
+        }
+      }
+    }));
     let timeout;
     this.debouncedGenerateSlides = (editor, view) => {
       clearTimeout(timeout);
       timeout = setTimeout(() => {
-        if (view.file) {
+        if (view.file)
           this.generateSlides(view.file, true);
-        }
       }, 3e3);
     };
-    this.registerEvent(
-      this.app.workspace.on("editor-change", this.debouncedGenerateSlides)
-    );
+    this.registerEvent(this.app.workspace.on("editor-change", this.debouncedGenerateSlides));
     this.addCommand({
       id: "generate-markdeep-slides",
       name: "Generate Markdeep Slides for current file",
       callback: () => {
         const activeFile = this.app.workspace.getActiveFile();
-        if (activeFile) {
+        if (activeFile)
           this.generateSlides(activeFile, false);
-        } else {
+        else
           new import_obsidian.Notice("No active file to generate slides from.");
-        }
       }
     });
     this.addCommand({
@@ -267,16 +282,18 @@ var MarkdeepSlidesPlugin = class extends import_obsidian.Plugin {
     this.addSettingTab(new MarkdeepSlidesSettingTab(this.app, this));
     this.registerView(
       SLIDES_VIEW_TYPE,
-      (leaf) => new SlidesView(leaf)
-      // URL is now passed via ViewState
+      (leaf) => new SlidesView(leaf, this)
     );
     console.log("Markdeep Slides plugin loaded.");
   }
   onunload() {
     console.log("Markdeep Slides plugin unloaded.");
-    if (this.httpServer) {
+    if (this.httpServer)
       this.httpServer.stop();
-    }
+    this.slideViews.clear();
+  }
+  removeSlideView(htmlPath) {
+    this.slideViews.delete(htmlPath);
   }
   async loadSettings() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
@@ -303,9 +320,8 @@ var MarkdeepSlidesPlugin = class extends import_obsidian.Plugin {
     }
     const htmlPath = (0, import_path.join)(this.settings.slidesPath, `${activeFile.basename}.html`);
     const htmlFile = this.app.vault.getAbstractFileByPath(htmlPath);
-    if (!htmlFile) {
+    if (!htmlFile)
       await this.generateSlides(activeFile, false);
-    }
     const slideUrl = `http://localhost:${SERVER_PORT}/${activeFile.basename}.html`;
     window.open(slideUrl, "_blank");
     new import_obsidian.Notice(`Opening slides in external browser...`);
@@ -324,96 +340,83 @@ var MarkdeepSlidesPlugin = class extends import_obsidian.Plugin {
     }
     const htmlPath = (0, import_path.join)(this.settings.slidesPath, `${activeFile.basename}.html`);
     const htmlFile = this.app.vault.getAbstractFileByPath(htmlPath);
-    if (!htmlFile) {
+    if (!htmlFile)
       await this.generateSlides(activeFile, false);
-    }
     const slideUrl = `http://localhost:${SERVER_PORT}/${activeFile.basename}.html`;
     this.app.workspace.detachLeavesOfType(SLIDES_VIEW_TYPE);
     const leaf = this.app.workspace.getLeaf("split", "vertical");
     await leaf.setViewState({
       type: SLIDES_VIEW_TYPE,
       active: true,
-      state: { url: slideUrl }
-      // Pass the URL to the view state
+      state: { url: slideUrl, htmlPath }
     });
     this.app.workspace.revealLeaf(leaf);
+    const view = leaf.view;
+    this.slideViews.set(htmlPath, view);
     new import_obsidian.Notice(`Opening slides in a new pane.`);
   }
-  // Removed getOpenCommand as it's no longer needed
   async generateSlides(file, isAuto) {
-    if (!file || file.extension !== "md") {
+    if (!file || file.extension !== "md")
       return;
-    }
     const fileCache = this.app.metadataCache.getFileCache(file);
-    const frontmatter = fileCache == null ? void 0 : fileCache.frontmatter;
-    if (!this.hasMdslidesTag(frontmatter)) {
-      if (!isAuto) {
+    if (!this.hasMdslidesTag(fileCache == null ? void 0 : fileCache.frontmatter)) {
+      if (!isAuto)
         new import_obsidian.Notice('File does not have "mdslides" in its tags. Slides not generated.');
-      }
       return;
     }
     try {
       const fileContent = await this.app.vault.read(file);
-      const frontmatterRegex = /^---\s*[\s\S]*?---\s*/;
+      const frontmatterRegex = /^---\s*[ -￿]*?---\s*/;
       const content = fileContent.replace(frontmatterRegex, "");
       let htmlToProcess = content;
       const metaCharset = '<meta charset="utf-8">';
       if (htmlToProcess.includes("</head>")) {
         htmlToProcess = htmlToProcess.replace("</head>", `${metaCharset}
 </head>`);
-      } else if (htmlToProcess.includes("<head>")) {
-        htmlToProcess = htmlToProcess.replace("<head>", `<head>
-${metaCharset}`);
       } else {
         htmlToProcess = `${metaCharset}
 ${htmlToProcess}`;
       }
+      const SCRIPT_TO_APPEND = `
+<script src="markdeep-slides/slides-init.js"><\/script>
+`;
+      const fullScript = `${SCRIPT_TO_APPEND}<script>${this.idiomorphScript}<\/script>${REFRESH_SCRIPT}`;
       if (htmlToProcess.includes("</body>")) {
-        htmlToProcess = htmlToProcess.replace("</body>", `${SCRIPT_TO_APPEND}
+        htmlToProcess = htmlToProcess.replace("</body>", `${fullScript}
 </body>`);
-      } else if (htmlToProcess.includes("<html>")) {
-        htmlToProcess = htmlToProcess.replace("</html>", `${SCRIPT_TO_APPEND}
-</html>`);
       } else {
-        htmlToProcess = htmlToProcess + SCRIPT_TO_APPEND;
+        htmlToProcess = htmlToProcess + fullScript;
       }
       const finalHtml = htmlToProcess;
       const outputDir = this.settings.slidesPath;
-      const outputFileName = `${file.basename}.html`;
-      const outputPath = (0, import_path.join)(outputDir, outputFileName);
+      const outputPath = (0, import_path.join)(outputDir, `${file.basename}.html`);
       try {
         await this.app.vault.createFolder(outputDir);
       } catch (e) {
       }
       const existingFile = this.app.vault.getAbstractFileByPath(outputPath);
-      if (existingFile && existingFile instanceof import_obsidian.TFile) {
+      if (existingFile instanceof import_obsidian.TFile) {
         await this.app.vault.modify(existingFile, finalHtml);
       } else {
         await this.app.vault.create(outputPath, finalHtml);
       }
-      if (!isAuto) {
+      if (!isAuto)
         new import_obsidian.Notice(`Slides generated successfully at: ${outputPath}`);
-      }
       console.log(`Slides for ${file.basename} processed.`);
     } catch (error) {
       console.error("Error generating slides:", error);
-      if (!isAuto) {
+      if (!isAuto)
         new import_obsidian.Notice("Failed to generate slides. See console for details.");
-      }
     }
   }
   hasMdslidesTag(frontmatter) {
-    if (!frontmatter || !frontmatter.tags) {
+    if (!(frontmatter == null ? void 0 : frontmatter.tags))
       return false;
-    }
     const tags = frontmatter.tags;
     if (typeof tags === "string") {
       return tags.split(",").map((t) => t.trim()).includes("mdslides");
     }
-    if (Array.isArray(tags)) {
-      return tags.includes("mdslides");
-    }
-    return false;
+    return Array.isArray(tags) ? tags.includes("mdslides") : false;
   }
 };
 var MarkdeepSlidesSettingTab = class extends import_obsidian.PluginSettingTab {
