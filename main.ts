@@ -268,6 +268,12 @@ export default class MarkdeepSlidesPlugin extends Plugin {
             callback: () => this.openSlidesInExternalBrowser(),
         });
 
+        this.addCommand({
+            id: 'open-slides-in-file-explorer',
+            name: 'Open Slides in File Explorer',
+            callback: () => this.openSlidesInFileExplorer(),
+        });
+
         this.addSettingTab(new MarkdeepSlidesSettingTab(this.app, this));
 
         this.registerView(
@@ -322,6 +328,34 @@ export default class MarkdeepSlidesPlugin extends Plugin {
         const slideUrl = `http://localhost:${this.settings.port}/${activeFile.basename}.html`;
         window.open(slideUrl, '_blank');
         new Notice(`Opening slides in external browser...`);
+    }
+
+    private async openSlidesInFileExplorer() {
+        const activeFile = this.app.workspace.getActiveFile();
+        if (!activeFile || activeFile.extension !== 'md') {
+            new Notice('No active Markdown file.');
+            return;
+        }
+
+        const frontmatter = this.app.metadataCache.getFileCache(activeFile)?.frontmatter;
+        if (!this.hasMdslidesTag(frontmatter)) {
+            new Notice('File does not have "mdslides" in its tags.');
+            return;
+        }
+
+        const outputDir = this.settings.slidesPath;
+        const htmlFileName = `${activeFile.basename}.html`;
+        const vaultBasePath = (this.app.vault.adapter as any).getBasePath();
+        const absoluteHtmlPath = path.join(vaultBasePath, outputDir, htmlFileName);
+
+        const electron = window.require('electron');
+        if (electron && electron.shell) {
+            electron.shell.showItemInFolder(absoluteHtmlPath);
+            new Notice(`Opened ${htmlFileName} in file explorer.`);
+        } else {
+            new Notice('Could not open file explorer. Electron shell not available.');
+            console.error('Electron shell not available.');
+        }
     }
     
     async openSlidesInBrowser() {

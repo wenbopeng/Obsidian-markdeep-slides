@@ -269,6 +269,11 @@ var MarkdeepSlidesPlugin = class extends import_obsidian.Plugin {
       name: "Open Slides in External Browser",
       callback: () => this.openSlidesInExternalBrowser()
     });
+    this.addCommand({
+      id: "open-slides-in-file-explorer",
+      name: "Open Slides in File Explorer",
+      callback: () => this.openSlidesInFileExplorer()
+    });
     this.addSettingTab(new MarkdeepSlidesSettingTab(this.app, this));
     this.registerView(
       SLIDES_VIEW_TYPE,
@@ -315,6 +320,31 @@ var MarkdeepSlidesPlugin = class extends import_obsidian.Plugin {
     const slideUrl = `http://localhost:${this.settings.port}/${activeFile.basename}.html`;
     window.open(slideUrl, "_blank");
     new import_obsidian.Notice(`Opening slides in external browser...`);
+  }
+  async openSlidesInFileExplorer() {
+    var _a;
+    const activeFile = this.app.workspace.getActiveFile();
+    if (!activeFile || activeFile.extension !== "md") {
+      new import_obsidian.Notice("No active Markdown file.");
+      return;
+    }
+    const frontmatter = (_a = this.app.metadataCache.getFileCache(activeFile)) == null ? void 0 : _a.frontmatter;
+    if (!this.hasMdslidesTag(frontmatter)) {
+      new import_obsidian.Notice('File does not have "mdslides" in its tags.');
+      return;
+    }
+    const outputDir = this.settings.slidesPath;
+    const htmlFileName = `${activeFile.basename}.html`;
+    const vaultBasePath = this.app.vault.adapter.getBasePath();
+    const absoluteHtmlPath = path.join(vaultBasePath, outputDir, htmlFileName);
+    const electron = window.require("electron");
+    if (electron && electron.shell) {
+      electron.shell.showItemInFolder(absoluteHtmlPath);
+      new import_obsidian.Notice(`Opened ${htmlFileName} in file explorer.`);
+    } else {
+      new import_obsidian.Notice("Could not open file explorer. Electron shell not available.");
+      console.error("Electron shell not available.");
+    }
   }
   async openSlidesInBrowser() {
     var _a;
