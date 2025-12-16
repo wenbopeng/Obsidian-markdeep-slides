@@ -20,7 +20,7 @@
 为了让插件正常工作，您需要自行提供 Markdeep 的核心脚本。
 
 1.  在您的 Obsidian 仓库（Vault）的根目录下，创建一个名为 `markdeep-slides` 的文件夹。
-**特别提示**: 开发者对 Markdeep 的核心脚本进行了二次开发，优化了编辑体验并支持更多语法和呈现方式。您可以在 [Markdeep Slides 项目仓库](https://github.com/your-repo-for-markdeep-slides-dependencies) 中获取这些优化过的相关依赖文件。
+**特别提示**: 开发者对 Markdeep 的核心脚本进行了二次开发，优化了编辑体验并支持更多语法和呈现方式。您可以在 [wenbopeng/markdeep-slides-project](https://github.com/wenbopeng/markdeep-slides-project) 中获取这些优化过的相关依赖文件。
 2.  下载 [Markdeep 脚本](https://casual-effects.com/markdeep/markdeep.min.js)。
 3.  将下载的脚本重命名为 `slides-init.js` 并放入 `markdeep-slides` 文件夹中。
     最终，您应该拥有这样一个文件路径：`<您的仓库路径>/markdeep-slides/slides-init.js`。
