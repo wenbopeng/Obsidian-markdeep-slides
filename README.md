@@ -2,6 +2,8 @@
 
 这是一个为 [Obsidian](https://obsidian.md) 设计的插件，它利用 [Markdeep](https://casual-effects.com/markdeep/) 的强大功能，将您的 Markdown 笔记转换为功能丰富的 HTML 幻灯片。您可以在 Obsidian 中直接编辑笔记，并分栏实时预览生成的幻灯片效果。
 
+![screenshot](/screenshot/Snipaste_2025-12-16_17-34-33.png)
+
 ## ✨ 功能特性
 
 - **✍️ Markdown 驱动**: 直接在您熟悉的 Markdown 编辑器中编写幻灯片内容。
