@@ -1,8 +1,8 @@
 # Obsidian Markdeep Slides
 
-这是一个为 [Obsidian](https://obsidian.md) 设计的插件，它利用 [Markdeep](https://casual-effects.com/markdeep/) 的强大功能，将您的 Markdown 笔记转换为功能丰富的 HTML 幻灯片。您可以在 Obsidian 中直接编辑笔记，并分栏实时预览生成的幻灯片效果。
+这是一个为 [Obsidian](https://obsidian.md) 设计的插件，它利用 [Markdeep](https://casual-effects.com/markdeep/) 的强大功能，将您的 Markdown 笔记转换为功能丰富的 HTML 幻灯片。您可以在 Obsidian 中直接编辑笔记，并分栏实时预览生成的幻灯片效果。依赖的资源请前往[wenbopeng/markdeep-slides-project](https://github.com/wenbopeng/markdeep-slides-project) 中获取这些优化过的相关依赖文件。
 
-![screenshot](/screenshot/Snipaste_2025-12-16_17-34-33.png)
+https://github.com/user-attachments/assets/52670bdc-39aa-4d61-992d-f7d9d5d3ad4b
 
 ## ✨ 功能特性
 
