@@ -1,6 +1,6 @@
 # Obsidian Markdeep Slides
 
-这是一个为 [Obsidian](https://obsidian.md) 设计的插件，它利用 [Markdeep](https://casual-effects.com/markdeep/) 的强大功能，将您的 Markdown 笔记转换为功能丰富的 HTML 幻灯片。您可以在 Obsidian 中直接编辑笔记，并分栏实时预览生成的幻灯片效果。依赖的资源请前往[wenbopeng/markdeep-slides-project](https://github.com/wenbopeng/markdeep-slides-project) 中获取这些优化过的相关依赖文件。
+这是一个为 [Obsidian](https://obsidian.md) 设计的插件，它利用 [Markdeep](https://casual-effects.com/markdeep/) 的强大功能，将您的 Markdown 笔记转换为功能丰富的 HTML 幻灯片。您可以在 Obsidian 中直接编辑笔记，并分栏实时预览生成的幻灯片效果。依赖的资源：请前往[wenbopeng/markdeep-slides-project](https://github.com/wenbopeng/markdeep-slides-project) 中获取解释器和主题。
 
 https://github.com/user-attachments/assets/52670bdc-39aa-4d61-992d-f7d9d5d3ad4b
 
@@ -22,10 +22,10 @@ https://github.com/user-attachments/assets/52670bdc-39aa-4d61-992d-f7d9d5d3ad4b
 为了让插件正常工作，您需要自行提供 Markdeep 的核心脚本。
 
 1.  在您的 Obsidian 仓库（Vault）的根目录下，创建一个名为 `markdeep-slides` 的文件夹。
-**特别提示**: 开发者对 Markdeep 的核心脚本进行了二次开发，优化了编辑体验并支持更多语法和呈现方式。您可以在 [wenbopeng/markdeep-slides-project](https://github.com/wenbopeng/markdeep-slides-project) 中获取这些优化过的相关依赖文件。
-2.  下载 [Markdeep 脚本](https://casual-effects.com/markdeep/markdeep.min.js)。
-3.  将下载的脚本重命名为 `slides-init.js` 并放入 `markdeep-slides` 文件夹中。
-    最终，您应该拥有这样一个文件路径：`<您的仓库路径>/markdeep-slides/slides-init.js`。
+**特别提示**: 开发者对 Markdeep 的核心脚本进行了二次开发，优化了编辑体验并支持更多语法和呈现方式。请前往[wenbopeng/markdeep-slides-project](https://github.com/wenbopeng/markdeep-slides-project) 中获取解释器和主题, 他们存放于你下载的`markdeep-slides`文件夹中。
+2.  默认地，解释器和主题文件夹，也就是`markdeep-slides`文件夹，您下载后请存放在Obsidian vault根目录下的`markdeep-slides`文件夹中， 当然，这个文件夹的路径你可以在插件设置项中自行定义。
+3.  最终，您应该拥有这样一个文件路径：`<您的仓库路径>/markdeep-slides/markdeep-slides`，其中， `markdeep-slides`文件夹里面是解释器、主题文件和其他依赖文件。
+4. 更多的语法和自定义设置，请前往[wenbopeng/markdeep-slides-project](https://github.com/wenbopeng/markdeep-slides-project) 了解
 
 #### 2. 创建您的第一份幻灯片
 
@@ -38,7 +38,7 @@ https://github.com/user-attachments/assets/52670bdc-39aa-4d61-992d-f7d9d5d3ad4b
     ---
     ```
 
-3.  开始编写您的幻灯片内容。在 Markdeep 中，使用三个或更多的短横线 (`---`) 来分隔每一页幻灯片。
+3.  开始编写您的幻灯片内容。在 Markdeep 中，使用三个或更多的短横线 (`---`) 来手动分隔每一页幻灯片。当然，我也默认开启了H1和H2标题自动分页，你可以自行关闭
 
     ```markdown
     # 幻灯片 1：标题
@@ -54,7 +54,7 @@ https://github.com/user-attachments/assets/52670bdc-39aa-4d61-992d-f7d9d5d3ad4b
 
     您可以使用 Markdeep 的所有功能，例如插入图片和图表。
 
-    ![[your-image.png]]
+    ![your-image](your-image.png)
     ```
 
 #### 3. 预览幻灯片
